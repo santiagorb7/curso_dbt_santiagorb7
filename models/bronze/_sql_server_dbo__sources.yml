@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: sql_server_dbo
-    database: DEV_SILVER_DB
+    database: DEV_BRONZE_DB
     schema: sql_server_dbo
     tables:
       - name: addresses
