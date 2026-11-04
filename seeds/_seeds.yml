@@ -1,0 +1,31 @@
+# =============================================================================
+# Seeds: datos de referencia pequeños y estables, versionados en Git
+# =============================================================================
+# Un seed encaja con listas cortas que cambian poco y que no existen en ningún
+# sistema origen (códigos de país, mapeos de categorías...). No encaja con
+# datos transaccionales ni con volúmenes grandes: eso llega a Bronze por la
+# herramienta de ingesta.
+# =============================================================================
+
+seeds:
+  - name: country_codes
+    description: Mapeo de país a código ISO 3166-1 alpha-2 y continente.
+    columns:
+      - name: country_code
+        description: Código ISO 3166-1 alpha-2.
+        data_tests:
+          - unique
+          - not_null
+      - name: country_name
+        description: Nombre del país en inglés.
+        data_tests:
+          - unique
+          - not_null
+      - name: continent
+        description: Continente.
+        data_tests:
+          - not_null
+          # Valores sacados del propio CSV (sort -u sobre la columna).
+          - accepted_values:
+              arguments:
+                values: ['Africa', 'Asia', 'Europe', 'North America', 'Oceania', 'South America']
