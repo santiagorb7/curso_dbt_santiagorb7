@@ -1,0 +1,132 @@
+# =============================================================================
+# Modelos Silver de sql_server_dbo
+# =============================================================================
+# Silver garantiza unicidad por clave de negocio y ausencia de borrados
+# lógicos: eso es justo lo que se testea aquí (unique + not_null en la PK y
+# relationships hacia sus padres).
+# =============================================================================
+
+models:
+  - name: slv_sql_server_dbo__users
+    description: Usuarios sin borrados lógicos, deduplicados y con email normalizado.
+    columns:
+      - name: user_id
+        data_tests: [unique, not_null]
+      - name: email
+        description: Email en minúsculas y sin espacios en los extremos.
+        data_tests: [not_null]
+      - name: address_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('slv_sql_server_dbo__addresses')
+                field: address_id
+
+  - name: slv_sql_server_dbo__orders
+    description: Pedidos sin borrados lógicos y deduplicados.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_sql_server_dbo__users')
+                field: user_id
+      - name: order_status
+        description: '{{ doc("order_status") }}'
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['preparing', 'shipped', 'delivered']
+
+  - name: slv_sql_server_dbo__order_items
+    description: Líneas de pedido sin borrados lógicos y deduplicadas.
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('slv_sql_server_dbo__orders')
+                field: order_id
+      - name: quantity
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+
+  - name: slv_sql_server_dbo__products
+    description: Productos sin borrados lógicos y deduplicados.
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: unit_price_usd
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+
+  - name: slv_sql_server_dbo__addresses
+    description: Direcciones sin borrados lógicos y deduplicadas.
+    columns:
+      - name: address_id
+        data_tests: [unique, not_null]
+
+  - name: slv_sql_server_dbo__promos
+    description: Promociones sin borrados lógicos y deduplicadas.
+    columns:
+      - name: promo_id
+        data_tests: [unique, not_null]
+      - name: promo_status
+        description: '{{ doc("promo_status") }}'
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['active', 'inactive']
+
+  - name: slv_sql_server_dbo__events
+    description: Eventos sin borrados lógicos y deduplicados. Modelo incremental.
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: event_type
+        description: '{{ doc("event_type") }}'
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['page_view', 'add_to_cart', 'checkout', 'package_shipped']
+
+# =============================================================================
+# Unit tests
+# =============================================================================
+# Un unit test comprueba la LÓGICA de un modelo con datos inventados, sin
+# depender de lo que haya en Snowflake. Aquí: que Silver descarta borrados y
+# se queda con la versión más reciente de cada usuario.
+#   dbt test --select "slv_sql_server_dbo__users,test_type:unit"
+# =============================================================================
+unit_tests:
+  - name: test_slv_users_quita_borrados_y_deduplica
+    model: slv_sql_server_dbo__users
+    given:
+      - input: ref('stg_sql_server_dbo__users')
+        rows:
+          # u1 aparece dos veces: debe quedar solo la versión de 2024-02-01
+          - {user_id: u1, email: ' Ana@Example.com ', is_deleted: false, date_load: '2024-01-01 00:00:00'}
+          - {user_id: u1, email: 'ana.nueva@example.com', is_deleted: false, date_load: '2024-02-01 00:00:00'}
+          # u2 está borrado en origen: no debe aparecer
+          - {user_id: u2, email: 'luis@example.com', is_deleted: true, date_load: '2024-01-01 00:00:00'}
+          # u3 comprueba la normalización del email
+          - {user_id: u3, email: '  MARTA@Example.ES', is_deleted: false, date_load: '2024-01-01 00:00:00'}
+    expect:
+      rows:
+        - {user_id: u1, email: 'ana.nueva@example.com'}
+        - {user_id: u3, email: 'marta@example.es'}

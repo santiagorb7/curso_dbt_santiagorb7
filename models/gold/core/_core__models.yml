@@ -1,0 +1,143 @@
+# =============================================================================
+# Gold · core: dimensiones y hechos compartidos por toda la organización
+# =============================================================================
+
+models:
+  - name: dim_users
+    description: Dimensión de usuarios enriquecida con su dirección por defecto.
+    columns:
+      - name: user_id
+        description: PK del usuario.
+        data_tests:
+          - unique
+          - not_null
+      - name: first_name
+        description: Nombre.
+      - name: last_name
+        description: Apellido.
+      - name: full_name
+        description: Nombre y apellido concatenados.
+      - name: email
+        description: Email normalizado.
+        data_tests:
+          - not_null
+      - name: is_valid_email_address
+        description: TRUE si el email cumple el formato esperado.
+      - name: phone_number
+        description: Teléfono (puede ser nulo).
+      - name: address_id
+        description: FK a dim_addresses.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_addresses')
+                field: address_id
+      - name: address_line
+        description: Dirección por defecto (desnormalizada).
+      - name: zipcode
+        description: Código postal.
+      - name: state
+        description: Estado o provincia.
+      - name: country
+        description: País.
+      - name: continent
+        description: Continente (desde el seed country_codes).
+      - name: registered_at_utc
+        description: Timestamp UTC del alta.
+      - name: last_updated_at_utc
+        description: Timestamp UTC de la última modificación.
+      - name: days_since_registration
+        description: Días desde el alta hasta la ejecución del modelo.
+      - name: date_load
+        description: Timestamp de la última sincronización de Fivetran.
+
+  - name: dim_addresses
+    description: Direcciones con código ISO y continente del seed country_codes.
+    columns:
+      - name: address_id
+        data_tests: [unique, not_null]
+      - name: continent
+        description: Nulo si el país de Bronze no está en el seed.
+        data_tests:
+          # severity warn: avisa de países que faltan en el seed sin bloquear
+          # el pipeline. El resultado aparece como WARN en el log.
+          - not_null:
+              config:
+                severity: warn
+
+  - name: dim_products
+    description: Productos con categorización del stock.
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: stock_status
+        description: '{{ doc("stock_status") }}'
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['out_of_stock', 'low_stock', 'in_stock']
+
+  - name: dim_dates
+    description: Calendario de 2020 a 2030. Grano día.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+      - name: date_id
+        description: Fecha en formato numérico YYYYMMDD.
+        data_tests: [unique, not_null]
+      - name: is_weekend
+        description: TRUE en sábado y domingo.
+
+  - name: fct_orders
+    description: Hechos de pedidos. Grano pedido.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_users')
+                field: user_id
+      - name: order_status
+        description: '{{ doc("order_status") }}'
+      - name: net_order_cost_usd
+        description: total_order_cost_usd menos el descuento de la promoción.
+
+  - name: fct_order_items
+    description: Hechos de líneas de pedido. Grano (order_id, product_id).
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: product_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+
+  - name: fct_events
+    description: Hechos de eventos de navegación. Grano evento.
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: event_type
+        description: '{{ doc("event_type") }}'
+      - name: user_id
+        data_tests:
+          # store_failures guarda las filas que fallan en una tabla de
+          # Snowflake (schema *_dbt_test__audit) para poder investigarlas.
+          - relationships:
+              arguments:
+                to: ref('dim_users')
+                field: user_id
+              config:
+                store_failures: true
