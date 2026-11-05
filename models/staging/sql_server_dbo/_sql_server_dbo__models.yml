@@ -1,0 +1,60 @@
+# =============================================================================
+# Modelos de staging de sql_server_dbo
+# =============================================================================
+# Staging es 1:1 con Bronze y todavía contiene borrados lógicos y posibles
+# duplicados, así que aquí solo se testea lo que el modelo garantiza: que la
+# clave no llega nula. La unicidad se testea en Silver, que es donde se
+# deduplica.
+# =============================================================================
+
+models:
+  - name: stg_sql_server_dbo__users
+    description: Usuarios de Bronze renombrados y casteados.
+    columns:
+      - name: user_id
+        data_tests: [not_null]
+      - name: is_deleted
+        description: TRUE si Fivetran marcó la fila como borrada en origen.
+
+  - name: stg_sql_server_dbo__orders
+    description: Pedidos de Bronze renombrados y casteados.
+    columns:
+      - name: order_id
+        data_tests: [not_null]
+      - name: order_status
+        description: '{{ doc("order_status") }}'
+
+  - name: stg_sql_server_dbo__order_items
+    description: Líneas de pedido con clave sustituta order_item_id.
+    columns:
+      - name: order_item_id
+        description: Clave sustituta de (order_id, product_id).
+        data_tests: [not_null]
+
+  - name: stg_sql_server_dbo__products
+    description: Productos de Bronze renombrados y casteados.
+    columns:
+      - name: product_id
+        data_tests: [not_null]
+
+  - name: stg_sql_server_dbo__addresses
+    description: Direcciones de Bronze renombradas y casteadas.
+    columns:
+      - name: address_id
+        data_tests: [not_null]
+
+  - name: stg_sql_server_dbo__promos
+    description: Promociones de Bronze renombradas y casteadas.
+    columns:
+      - name: promo_id
+        data_tests: [not_null]
+      - name: promo_status
+        description: '{{ doc("promo_status") }}'
+
+  - name: stg_sql_server_dbo__events
+    description: Eventos de navegación de Bronze renombrados y casteados.
+    columns:
+      - name: event_id
+        data_tests: [not_null]
+      - name: event_type
+        description: '{{ doc("event_type") }}'
