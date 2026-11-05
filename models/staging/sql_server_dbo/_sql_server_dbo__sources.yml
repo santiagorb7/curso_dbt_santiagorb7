@@ -1,0 +1,249 @@
+# =============================================================================
+# Source sql_server_dbo · capa Bronze
+# =============================================================================
+# Bronze es estática: la carga la herramienta de ingesta (Fivetran) y dbt
+# NUNCA construye nada aquí. Solo la declaramos para poder usar
+#     {{ source('sql_server_dbo', '<tabla>') }}
+# La database sale de la variable de entorno DBT_BRONZE_DB, definida en tus
+# credenciales de desarrollo de dbt Platform (ver README).
+# =============================================================================
+
+sources:
+  - name: sql_server_dbo
+    description: >
+      Base de datos transaccional del e-commerce (SQL Server), replicada a
+      Snowflake con Fivetran.
+    database: "{{ env_var('DBT_BRONZE_DB') }}"
+    schema: sql_server_dbo
+
+    # Freshness: `dbt source freshness` compara max(loaded_at_field) con la
+    # hora actual. _loaded_at es el momento de la carga en Bronze; _fivetran_synced
+    # conserva cuándo cambió la fila en origen y es la que usan los incrementales.
+    # La config se hereda en todas las tablas salvo que una la redefina.
+    config:
+      loaded_at_field: _loaded_at
+      freshness:
+        warn_after: {count: 24, period: hour}
+        error_after: {count: 48, period: hour}
+
+    tables:
+      - name: users
+        description: Usuarios registrados en el e-commerce.
+        columns:
+          - name: user_id
+            description: UUID del usuario.
+            data_tests:
+              - unique
+              - not_null
+          - name: first_name
+            description: Nombre.
+          - name: last_name
+            description: Apellido.
+          - name: email
+            description: Email del usuario.
+            data_tests:
+              - not_null
+          - name: phone_number
+            description: Teléfono (puede ser nulo).
+          - name: address_id
+            description: FK a la dirección por defecto del usuario.
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('sql_server_dbo', 'addresses')
+                    field: address_id
+          - name: created_at
+            description: Timestamp UTC del alta.
+            data_tests:
+              - not_null
+          - name: updated_at
+            description: Timestamp UTC de la última modificación.
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico que pone Fivetran.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización de Fivetran.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+      - name: orders
+        description: Pedidos realizados por los usuarios.
+        columns:
+          - name: order_id
+            description: UUID del pedido.
+            data_tests:
+              - unique
+              - not_null
+          - name: user_id
+            description: FK al usuario que hizo el pedido.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sql_server_dbo', 'users')
+                    field: user_id
+          - name: address_id
+            description: FK a la dirección de envío.
+          - name: promo_id
+            description: Código promocional usado (puede ser nulo).
+          - name: created_at
+            description: Timestamp UTC de creación del pedido.
+            data_tests:
+              - not_null
+          - name: estimated_delivery_at
+            description: Timestamp estimado de entrega.
+          - name: delivered_at
+            description: Timestamp real de entrega (nulo si no se ha entregado).
+          - name: tracking_id
+            description: ID de seguimiento del envío.
+          - name: shipping_service
+            description: Empresa de mensajería.
+          - name: shipping_cost
+            description: Coste del envío en USD.
+          - name: order_cost
+            description: Coste de los productos en USD, sin envío.
+          - name: order_total
+            description: Coste total del pedido en USD.
+            data_tests:
+              - not_null
+          - name: status
+            description: Estado del pedido.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: ['preparing', 'shipped', 'delivered']
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+      - name: order_items
+        description: Detalle de productos por pedido. Una fila por (order_id, product_id).
+        columns:
+          - name: order_id
+            description: FK al pedido.
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('sql_server_dbo', 'orders')
+                    field: order_id
+          - name: product_id
+            description: FK al producto.
+            data_tests:
+              - not_null
+          - name: quantity
+            description: Unidades del producto en el pedido.
+            data_tests:
+              - not_null
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+      - name: products
+        description: Catálogo de productos.
+        columns:
+          - name: product_id
+            description: UUID del producto.
+            data_tests:
+              - unique
+              - not_null
+          - name: name
+            description: Nombre comercial.
+          - name: price
+            description: Precio unitario en USD.
+            data_tests:
+              - not_null
+          - name: inventory
+            description: Unidades en stock.
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+      - name: addresses
+        description: Direcciones de envío.
+        columns:
+          - name: address_id
+            description: UUID de la dirección.
+            data_tests:
+              - unique
+              - not_null
+          - name: address
+            description: Calle y número.
+          - name: zipcode
+            description: Código postal.
+          - name: state
+            description: Estado o provincia.
+          - name: country
+            description: País.
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+      - name: promos
+        description: Códigos promocionales.
+        columns:
+          - name: promo_id
+            description: Identificador de la promoción.
+            data_tests:
+              - unique
+              - not_null
+          - name: discount
+            description: Descuento en USD (importe absoluto).
+          - name: status
+            description: Estado de la promoción.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: ['active', 'inactive']
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+      - name: events
+        description: Eventos de navegación de los usuarios. Tabla de mayor volumen del proyecto.
+        config:
+          # Columna temporal del evento. La usa microbatch (día 5) para
+          # filtrar automáticamente cada lote cuando un modelo lee este source.
+          event_time: created_at
+        columns:
+          - name: event_id
+            description: UUID del evento.
+            data_tests:
+              - unique
+              - not_null
+          - name: session_id
+            description: UUID de la sesión.
+            data_tests:
+              - not_null
+          - name: user_id
+            description: FK al usuario.
+          - name: page_url
+            description: URL del evento.
+          - name: created_at
+            description: Timestamp UTC del evento.
+            data_tests:
+              - not_null
+          - name: event_type
+            description: Tipo de evento.
+            data_tests:
+              - not_null
+          - name: order_id
+            description: FK al pedido (solo en eventos ligados a pedidos).
+          - name: product_id
+            description: FK al producto (solo en eventos ligados a productos).
+          - name: _fivetran_deleted
+            description: Marca de borrado lógico.
+          - name: _fivetran_synced
+            description: Timestamp de la última sincronización.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.

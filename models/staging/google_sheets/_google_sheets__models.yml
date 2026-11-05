@@ -1,0 +1,9 @@
+models:
+  - name: stg_google_sheets__budget
+    description: Presupuesto de Bronze renombrado y casteado.
+    columns:
+      - name: budget_id
+        description: Identificador de fila de la hoja (_row en origen).
+        data_tests: [not_null]
+      - name: budget_month
+        description: Mes del presupuesto, casteado a date.
