@@ -16,3 +16,8 @@ sources:
                     to: ref('products')
                     field: product_id
 
+          - name: quantity
+            data_tests:
+              - positive_values
+              
+

@@ -7,7 +7,7 @@ sources:
     tables:
       - name: budget
         columns:
-          - name: _row
+          - name: slv_google_sheets__budget
             data_tests:
               - unique
               - not_null
@@ -19,3 +19,7 @@ sources:
                   arguments:
                     min_value: 0
                     max_value: "num_orders"
+
+            - name: quantity_budgeted
+              data_tests:
+              - positive_values
